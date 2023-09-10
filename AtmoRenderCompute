@@ -1,26 +1,4 @@
-#pragma kernel CSMain
 
-float nearPlane;
-float farPlane;
-
-float4x4 _CurrV;
-float4x4 _CurrVP;
-float4x4 _PrevVP;
-float4x4 _PrevVP_NoFlip;
-
-// ----------------------------------------------------------------------------------------------------------------------------- //
-
-
-// Camera matrices parameters
-
-float4x4 _PreviousProjection;
-float4x4 _PreviousInverseProjection;
-float4x4 _PreviousRotation;
-float4x4 _PreviousWorldToCamera;
-float4x4 _Projection;
-float4x4 _InverseProjection;
-float4x4 _Rotation;
-float4x4 _WorldToCamera;
 
 // ----------------------------------------------------------------------------------------------------------------------------- //
 
