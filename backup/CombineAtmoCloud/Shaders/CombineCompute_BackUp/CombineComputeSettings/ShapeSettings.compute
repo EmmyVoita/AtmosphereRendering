@@ -1,0 +1,29 @@
+// Float:
+// global 
+#ifndef SHAPE_SETTINGS_COMPUTE
+#define SHAPE_SETTINGS_COMPUTE
+    
+    // Float:
+    float densityMultiplier;
+    float baseNoiseScale;
+    float shapeNoiseInfluence;
+    float densityOffset;
+
+    // Vector:
+    float3 baseNoiseOffset;
+    float3 shapeNoiseComponentWeights;
+
+     // Float:
+    float detailNoiseScale;
+    float detailNoiseInfluence;
+    float detailErodeWeightScalar;
+
+        // Vector:
+    float3 detailNoiseOffset;
+    float3 detailNoiseComponentWeights;
+    float3 curlNoiseComponentWeights;
+
+#endif
+
+
+
