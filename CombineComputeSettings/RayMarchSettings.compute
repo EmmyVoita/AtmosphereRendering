@@ -1,0 +1,9 @@
+// March settings
+int STEPS_PRIMARY;
+int STEPS_LIGHT;
+
+float ray_march_step_size;
+float rayOffsetStrength;
+
+Texture2D<float> BlueNoise;
+SamplerState sampler_BlueNoise;

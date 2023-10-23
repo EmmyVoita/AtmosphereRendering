@@ -1,0 +1,19 @@
+
+#ifndef LIGHTING_SETTINGS_COMPUTE
+#define LIGHTING_SETTINGS_COMPUTE
+
+    // Float:
+    float power;
+    float scatteringDensityMultiplier;
+    float lightAbsorptionThroughCloud;
+    float lightAbsorptionTowardSun;
+    float darknessThreshold;
+
+    // Vector:
+    float4 phaseParams;
+
+
+    //
+
+
+#endif

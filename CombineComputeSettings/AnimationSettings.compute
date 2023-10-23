@@ -1,0 +1,7 @@
+// Animation settings
+float previous_time = 0.0;
+float timeScale;
+float baseSpeed;
+float detailSpeed;
+
+const float offsetSpeed = 1 / 100.0;
