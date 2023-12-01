@@ -1,0 +1,177 @@
+#include "UnityCG.cginc"
+#include "../../Includes/RayMarch.cginc"
+
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel PostProcessAtmo
+
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+// Texture:
+RWTexture2D<float4> _MainTex;
+RWTexture2D<float4> History;
+RWTexture2D<float4> Result;
+
+Texture2D<float4> WorldPosition;
+SamplerState sampler_WorldPosition;
+
+
+float4x4 _PrevVP_NoFlip;
+float4x4 _ViewProjInv;
+
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
+
+float nearPlane;
+float farPlane;
+
+// Define the offsets
+static const int2 offsets[8] = {
+    int2(-1, -1), int2(-1, 1),
+    int2(1, -1), int2(1, 1),
+    int2(1, 0), int2(0, -1),
+    int2(0, 1), int2(-1, 0)
+};
+
+
+//-------------------------------------------------------------------------------------
+// Gaussian Blur
+//-------------------------------------------------------------------------------------
+
+
+static const float kernel[9] =
+{
+	.0625, .125, .0625,
+    .125,  .25,  .125,
+    .0625, .125, .0625  
+};
+
+float4 GaussianBlur(int2 uv)
+{
+    float4 col = float4(0., 0., 0., 0.);
+
+    int2 offsets[9] = { 
+        int2(-1, -1), int2(-1, 0), int2(-1, 1),
+        int2(0, -1), int2(0, 0), int2(0, 1),
+        int2(1, -1), int2(1, 0), int2(1, 1)
+    };
+
+    for (int i = 0; i < 9; i++)
+    {
+        col += float4(Result[uv + offsets[i]].rgb,1.) * kernel[i];
+    }
+
+    return col;
+}
+
+// Linearizes a Z buffer value
+float CalcLinearZ(float depth) 
+{
+    // bias it from [0, 1] to [-1, 1]
+    float lin = nearPlane / (farPlane - depth * (farPlane - nearPlane)) * farPlane;
+    return (lin * 2.0) - 1.0;
+}
+
+float DenormalizeDepth(float normalizedDepth)
+{
+    return normalizedDepth * (farPlane - nearPlane) + nearPlane;
+}
+
+
+float3 DenormalizeDepthToWorldPosition(float2 uv, float normalizedDepth)
+{
+    Ray ray = CreateCameraRay(uv, _CameraToWorld, _CameraInverseProjection);
+    float3 worldPos = ray.origin + ray.direction * DenormalizeDepth(normalizedDepth);
+    return worldPos;
+}
+
+uint2 GetReprojectionUV(float3 worldPosition, float width, float height)
+{
+    // Determine the ss_uv for the world position in the previous frame using the previous VP matrix, this assumes the object doesnt move:
+    float4 reproject_cs_pos = mul(_PrevVP_NoFlip, float4(worldPosition, 1.0));
+    float2 reproject_ss_ndc = reproject_cs_pos.xy / reproject_cs_pos.w;
+    float2 reproject_ss_uv = 0.5 * reproject_ss_ndc + 0.5;
+
+    // Convert uv to ss_id to use for thread_id:
+    uint2 reproject_thread_id = uint2(reproject_ss_uv * float2(width, height));
+    return reproject_thread_id;
+}
+
+float4 Calctxaa(uint2 hist_id, uint2 id, float4 currentBuffer)
+{
+    float4 historyBuffer = float4(History[hist_id].rgb,1.);
+    currentBuffer.a = 1.;
+
+    float4 colorAvg = currentBuffer;
+    float4 colorVar = currentBuffer * currentBuffer;
+
+    // Marco Salvi's Implementation (by Chris Wyman)
+    for (int i = 0; i < 8; i++)
+    {
+        float4 neighborTexel =  _MainTex[id.xy + offsets[i]];
+        colorAvg += neighborTexel;
+        colorVar += neighborTexel * neighborTexel;
+    }
+    colorAvg /= 9.0;
+    colorVar /= 9.0;
+
+    float gColorBoxSigma = 0.75;
+    float4 sigma = sqrt(max(float4(0, 0, 0, 0), colorVar - colorAvg * colorAvg));
+    float4 colorMin = colorAvg - gColorBoxSigma * sigma;
+    float4 colorMax = colorAvg + gColorBoxSigma * sigma;
+
+    historyBuffer = clamp(historyBuffer, colorMin, colorMax);
+
+
+    float4 txaa = lerp(currentBuffer, historyBuffer, 0.95);
+    return txaa;
+}
+
+[numthreads(8,8,1)]
+void PostProcessAtmo (uint3 id : SV_DispatchThreadID)
+{
+    // Get the dimensions of the RenderTexture
+    uint width, height;
+    Result.GetDimensions(width, height);
+
+     // Add clouds to background 
+    float4 currentBuffer =  _MainTex[id.xy]; 
+
+    // Centered normalized UV for ray marching
+    float2 centeredNormalizedUV = float2((id.xy + float2(0.5f, 0.5f)) / float2(width, height) * 2.0f - 1.0f);
+    float3 worldPosition = DenormalizeDepthToWorldPosition(centeredNormalizedUV, currentBuffer.a);
+
+    uint2 hist_id = GetReprojectionUV(worldPosition, width, height);
+    
+    
+    float4 txaa_r = Calctxaa(hist_id, id.xy, currentBuffer);
+    //float4 txaa = Calctxaa(id.xy, id.xy, currentBuffer); 
+
+
+    /*
+    if(id.x < (width / 2)-3)
+    {
+        /*if(hist_id.x != id.x && hist_id.y != id.y)
+        {
+            Result[id.xy] = float4(0,0,1,0);
+        }
+        else
+        {
+            Result[id.xy] = txaa_r;
+        }
+        Result[id.xy] = txaa_r;
+        
+    }
+    else if(id.x > (width/2) + 3)
+    {
+        Result[id.xy] = txaa;
+    }
+    else
+    {
+        Result[id.xy] = float4(1,0,0,1);
+    }
+    */
+    //Result[id.xy] = float4(currentBuffer.rgb,1.);
+    Result[id.xy] = txaa_r;
+    Result[id.xy] = GaussianBlur(id.xy);
+}
